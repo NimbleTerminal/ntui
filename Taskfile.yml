@@ -1,0 +1,44 @@
+version: '3'
+
+env:
+  GOWORK: 'off'
+
+tasks:
+  default:
+    cmds: [{task: test}]
+  fmt:
+    desc: Format Go source
+    cmds: ['gofmt -w .']
+  fmt-check:
+    desc: Check Go formatting without changing files
+    cmds:
+      - |
+        files="$(gofmt -l .)"
+        if [ -n "$files" ]; then printf '%s\n' "$files"; exit 1; fi
+  test:
+    desc: Run native tests
+    cmds: ['go test -mod=readonly ./...']
+  test-race:
+    desc: Run native tests with the race detector
+    cmds: ['go test -mod=readonly -race ./...']
+  test-no-cgo:
+    desc: Test without CGO
+    env: {CGO_ENABLED: '0'}
+    cmds: ['go test -mod=readonly ./...']
+  vet:
+    desc: Run Go vet
+    cmds: ['go vet -mod=readonly ./...']
+  build:
+    desc: Build library and examples
+    cmds: ['go build -mod=readonly ./...']
+  run-hud:
+    desc: Run the interactive HUD example
+    cmds: ['go run -mod=readonly ./examples/hud']
+  ci:
+    desc: Run formatting, vet, race tests, and CGO-free tests
+    cmds:
+      - task: fmt-check
+      - task: vet
+      - task: test-race
+      - task: test-no-cgo
+      - task: build
