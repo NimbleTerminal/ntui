@@ -81,6 +81,28 @@ func (m *model) View() tea.View {
 3. **Raster Backend (`ntui.RasterBackend`)**:
    - Scales cell coordinates by `(CellPixelWidth, CellPixelHeight)` and alpha-blends translucent panels, crisp borders, continuous pixel sliders, and `golang.org/x/image/font` typography onto `*image.RGBA` or `draw.Image` buffers.
 
+## Widgets & Themes
+
+- **Containers & Navigation**: `BeginPanel` / `EndPanel` (draggable, collapsible, z-ordered floating panels), `CollapsingHeader`, `TabBar`, `TreeNode` / `TreePop`, `Separator`, `BeginHorizontal` / `EndHorizontal`, `SameLine`
+- **Controls & Inputs**: `Button`, `Checkbox`, `RadioButton`, `SliderFloat`, `SliderInt`, `InputText`, `Combo`, `ListBox`, `ColorEdit`
+- **Data Display & Telemetry**: `Text`, `TextColored`, `KeyValue`, `TableRow`, `ProgressBar`, `PlotLines`, `PlotHistogram`
+- **Built-in Themes**: `DefaultTheme()`, `HUDTheme()`, `AmberTheme()`, `CyberpunkTheme()`, `LightTheme()`
+
+## Examples
+
+Run the interactive examples directly with `go run`:
+
+```sh
+# UX Element Catalog (4-tab showcase of all widgets, plots, trees, and themes)
+go run ./examples/catalog
+
+# Live GPU & Engine Telemetry Dashboard
+go run ./examples/dashboard
+
+# Interactive 3D Viewport + Floating HUD Overlay (Glyph & Kitty/Sixel Raster modes)
+go run ./examples/hud
+```
+
 See [DESIGN.md](DESIGN.md) for the full design prompt and technical specification.
 
 ## License

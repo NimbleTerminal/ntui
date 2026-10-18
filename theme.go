@@ -200,3 +200,63 @@ func HUDTheme() Theme {
 	t.Panel.BG = ColorRGBA(18, 22, 30, 195)
 	return t
 }
+
+// AmberTheme returns a retro phosphor-amber terminal theme.
+func AmberTheme() Theme {
+	return Theme{
+		Text:           WidgetStyle{FG: RGB(255, 196, 64)},
+		Muted:          WidgetStyle{FG: RGB(168, 118, 28), Dim: true},
+		Normal:         WidgetStyle{FG: RGB(255, 200, 72), BG: ColorRGBA(48, 32, 8, 235), Border: RGB(180, 120, 24), Accent: RGB(255, 176, 0)},
+		Hover:          WidgetStyle{FG: RGB(255, 235, 150), BG: ColorRGBA(78, 52, 12, 245), Border: RGB(255, 196, 64), Accent: RGB(255, 210, 80), Bold: true},
+		Active:         WidgetStyle{FG: RGB(28, 18, 4), BG: ColorRGBA(255, 188, 42, 250), Border: RGB(255, 230, 128), Accent: RGB(255, 215, 90), Bold: true},
+		Focus:          WidgetStyle{FG: RGB(255, 220, 110), BG: ColorRGBA(64, 42, 10, 240), Border: RGB(255, 230, 120), Accent: RGB(255, 196, 64)},
+		Panel:          WidgetStyle{FG: RGB(245, 186, 54), BG: ColorRGBA(24, 16, 4, 220), Border: RGB(145, 96, 20), Accent: RGB(255, 176, 0)},
+		PanelTitle:     WidgetStyle{FG: RGB(255, 220, 110), BG: ColorRGBA(62, 40, 8, 240), Border: RGB(195, 134, 28), Accent: RGB(255, 196, 64), Bold: true},
+		Input:          WidgetStyle{FG: RGB(255, 206, 84), BG: ColorRGBA(16, 10, 2, 240), Border: RGB(140, 92, 18), Accent: RGB(255, 176, 0)},
+		InputFocus:     WidgetStyle{FG: RGB(255, 235, 140), BG: ColorRGBA(32, 20, 4, 245), Border: RGB(255, 200, 64), Accent: RGB(255, 200, 64)},
+		Tooltip:        WidgetStyle{FG: RGB(255, 225, 120), BG: ColorRGBA(18, 12, 2, 250), Border: RGB(220, 155, 35)},
+		Border:         BorderSingle,
+		PanelBorder:    BorderDouble,
+		CompactButtons: true,
+	}
+}
+
+// CyberpunkTheme returns a high-contrast neon cyan and magenta theme.
+func CyberpunkTheme() Theme {
+	return Theme{
+		Text:           WidgetStyle{FG: RGB(220, 250, 255)},
+		Muted:          WidgetStyle{FG: RGB(120, 140, 180), Dim: true},
+		Normal:         WidgetStyle{FG: RGB(0, 245, 255), BG: ColorRGBA(26, 18, 48, 230), Border: RGB(180, 40, 220), Accent: RGB(255, 42, 165)},
+		Hover:          WidgetStyle{FG: RGB(255, 255, 255), BG: ColorRGBA(58, 24, 96, 245), Border: RGB(0, 245, 255), Accent: RGB(0, 245, 255), Bold: true},
+		Active:         WidgetStyle{FG: RGB(16, 10, 28), BG: ColorRGBA(0, 245, 255, 250), Border: RGB(255, 255, 255), Accent: RGB(255, 42, 165), Bold: true},
+		Focus:          WidgetStyle{FG: RGB(255, 240, 100), BG: ColorRGBA(44, 20, 76, 240), Border: RGB(255, 230, 0), Accent: RGB(0, 245, 255)},
+		Panel:          WidgetStyle{FG: RGB(215, 245, 255), BG: ColorRGBA(14, 10, 28, 215), Border: RGB(145, 35, 185), Accent: RGB(255, 42, 165)},
+		PanelTitle:     WidgetStyle{FG: RGB(0, 250, 255), BG: ColorRGBA(46, 16, 78, 240), Border: RGB(255, 42, 165), Accent: RGB(0, 245, 255), Bold: true},
+		Input:          WidgetStyle{FG: RGB(0, 245, 255), BG: ColorRGBA(10, 6, 20, 240), Border: RGB(120, 30, 160), Accent: RGB(255, 42, 165)},
+		InputFocus:     WidgetStyle{FG: RGB(255, 255, 255), BG: ColorRGBA(22, 12, 42, 245), Border: RGB(0, 245, 255), Accent: RGB(0, 245, 255)},
+		Tooltip:        WidgetStyle{FG: RGB(255, 255, 255), BG: ColorRGBA(20, 8, 36, 250), Border: RGB(0, 245, 255)},
+		Border:         BorderThick,
+		PanelBorder:    BorderThick,
+		CompactButtons: true,
+	}
+}
+
+// LightTheme returns a clean daylight theme with dark typography on light panels.
+func LightTheme() Theme {
+	return Theme{
+		Text:           WidgetStyle{FG: RGB(28, 34, 46)},
+		Muted:          WidgetStyle{FG: RGB(105, 115, 132)},
+		Normal:         WidgetStyle{FG: RGB(24, 32, 48), BG: ColorRGBA(212, 220, 234, 240), Border: RGB(140, 154, 178), Accent: RGB(36, 112, 224)},
+		Hover:          WidgetStyle{FG: RGB(10, 18, 32), BG: ColorRGBA(186, 204, 235, 245), Border: RGB(64, 124, 218), Accent: RGB(28, 98, 208), Bold: true},
+		Active:         WidgetStyle{FG: RGB(255, 255, 255), BG: ColorRGBA(36, 112, 224, 250), Border: RGB(20, 78, 170), Accent: RGB(24, 92, 200), Bold: true},
+		Focus:          WidgetStyle{FG: RGB(20, 28, 42), BG: ColorRGBA(200, 214, 238, 245), Border: RGB(210, 120, 20), Accent: RGB(36, 112, 224)},
+		Panel:          WidgetStyle{FG: RGB(30, 36, 48), BG: ColorRGBA(238, 242, 248, 230), Border: RGB(156, 168, 188), Accent: RGB(36, 112, 224)},
+		PanelTitle:     WidgetStyle{FG: RGB(18, 26, 42), BG: ColorRGBA(210, 220, 236, 245), Border: RGB(130, 146, 172), Accent: RGB(36, 112, 224), Bold: true},
+		Input:          WidgetStyle{FG: RGB(20, 26, 38), BG: ColorRGBA(252, 253, 255, 245), Border: RGB(150, 164, 186), Accent: RGB(36, 112, 224)},
+		InputFocus:     WidgetStyle{FG: RGB(10, 14, 24), BG: ColorRGBA(255, 255, 255, 255), Border: RGB(36, 112, 224), Accent: RGB(36, 112, 224)},
+		Tooltip:        WidgetStyle{FG: RGB(24, 30, 42), BG: ColorRGBA(250, 252, 255, 250), Border: RGB(110, 128, 156)},
+		Border:         BorderRounded,
+		PanelBorder:    BorderRounded,
+		CompactButtons: true,
+	}
+}

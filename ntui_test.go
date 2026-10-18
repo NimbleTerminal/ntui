@@ -295,3 +295,74 @@ func TestGlyphAndRasterBackendsRenderSameDrawList(t *testing.T) {
 		t.Fatalf("expected inside-panel pixel (45,54) to be alpha-blended over background, still got %+v", got)
 	}
 }
+
+func TestCatalogUXElements(t *testing.T) {
+	ctx := New(WithScreenSize(80, 30), WithTheme(CyberpunkTheme()))
+	activeTab := 0
+	comboIdx := 0
+	listIdx := 0
+	col := RGB(100, 150, 200)
+	wave := []float64{0.1, 0.4, 0.8, 0.5, 0.9, 0.2}
+
+	var comboRect Rect
+	ctx.BeginFrame()
+	if ctx.BeginPanel("Catalog", NewRect(1, 1, 60, 26)) {
+		ctx.TabBar("tabs", &activeTab, []string{"Controls", "Plots", "Trees"})
+		ctx.Combo("Quality", &comboIdx, []string{"Low", "Medium", "High"})
+		comboRect = ctx.LastWidgetRect
+
+		ctx.ListBox("Shaders", &listIdx, []string{"pbr.wgsl", "fur.wgsl", "fog.wgsl"}, 5)
+		if ctx.TreeNode("Root", true) {
+			ctx.KeyValue("Triangles", "12,480")
+			ctx.TreePop()
+		}
+		ctx.PlotLines("Wave", wave, 30, 2, "60 FPS")
+		ctx.PlotHistogram("Hist", wave, 30, 2, "Pass ms")
+		ctx.ColorEdit("Tint", &col)
+		ctx.TableRow([]string{"Pass", "Cost"}, []int{12, 10}, true)
+		ctx.TableRow([]string{"Shadow", "1.2ms"}, []int{12, 10}, false)
+	}
+	ctx.EndPanel()
+	ctx.EndFrame()
+
+	// Click Combo to advance selection
+	ctx.ProcessInput(tea.MouseClickMsg{X: comboRect.X + 4, Y: comboRect.Y, Button: tea.MouseLeft})
+	ctx.BeginFrame()
+	if ctx.BeginPanel("Catalog", NewRect(1, 1, 60, 26)) {
+		ctx.TabBar("tabs", &activeTab, []string{"Controls", "Plots", "Trees"})
+		ctx.Combo("Quality", &comboIdx, []string{"Low", "Medium", "High"})
+	}
+	ctx.EndPanel()
+	ctx.EndFrame()
+
+	ctx.ProcessInput(tea.MouseReleaseMsg{X: comboRect.X + 4, Y: comboRect.Y, Button: tea.MouseLeft})
+	ctx.BeginFrame()
+	if ctx.BeginPanel("Catalog", NewRect(1, 1, 60, 26)) {
+		ctx.TabBar("tabs", &activeTab, []string{"Controls", "Plots", "Trees"})
+		if !ctx.Combo("Quality", &comboIdx, []string{"Low", "Medium", "High"}) || comboIdx != 1 {
+			t.Fatalf("expected Combo click to advance comboIdx to 1, got %d", comboIdx)
+		}
+	}
+	ctx.EndPanel()
+	ctx.EndFrame()
+
+	// Render full catalog frame through both GlyphBackend and RasterBackend
+	ctx.BeginFrame()
+	if ctx.BeginPanel("Catalog", NewRect(1, 1, 60, 26)) {
+		ctx.TabBar("tabs", &activeTab, []string{"Controls", "Plots", "Trees"})
+		ctx.PlotLines("Wave", wave, 30, 2, "60 FPS")
+		ctx.PlotHistogram("Hist", wave, 30, 2, "Pass ms")
+		ctx.ColorEdit("Tint", &col)
+	}
+	ctx.EndPanel()
+	ctx.EndFrame()
+
+	glyphOut := NewGlyphBackend(80, 30).RenderToString(ctx.DrawList)
+	if !strings.Contains(glyphOut, "Controls") || !strings.Contains(glyphOut, "#6496C8") {
+		t.Fatalf("expected GlyphBackend output to contain tab and ColorEdit hex, got:\n%s", glyphOut)
+	}
+	img := NewRasterBackend(9, 18).RenderToImage(80, 30, ctx.DrawList)
+	if img.Bounds().Dx() != 720 || img.Bounds().Dy() != 540 {
+		t.Fatalf("unexpected raster image dimensions: %v", img.Bounds())
+	}
+}

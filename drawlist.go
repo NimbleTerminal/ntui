@@ -26,6 +26,8 @@ const (
 	CmdLine
 	// CmdGauge renders a continuous [0..1] progress or slider track with optional thumb and label.
 	CmdGauge
+	// CmdSparkline renders a series of normalized [0..1] values as a sparkline or histogram.
+	CmdSparkline
 )
 
 // DrawCmd is a backend-agnostic rendering instruction emitted during a UI frame.
@@ -40,6 +42,8 @@ type DrawCmd struct {
 	Border    BorderStyle
 	Fraction  float64
 	ShowThumb bool
+	Values    []float64
+	Histogram bool
 }
 
 // DrawList collects ordered rendering primitives for a single frame.
@@ -187,6 +191,25 @@ func (dl *DrawList) AddGauge(bounds Rect, fraction float64, showThumb bool, over
 		Bounds:    bounds,
 		Fraction:  fraction,
 		ShowThumb: showThumb,
+		Text:      overlay,
+		Style:     style,
+	})
+}
+
+// AddSparkline emits a sparkline or bar-histogram primitive for normalized [0..1] values.
+func (dl *DrawList) AddSparkline(bounds Rect, values []float64, histogram bool, overlay string, style WidgetStyle) {
+	if bounds.Empty() || len(values) == 0 {
+		return
+	}
+	copied := make([]float64, len(values))
+	for i, v := range values {
+		copied[i] = max(0, min(1, v))
+	}
+	dl.appendCmd(DrawCmd{
+		Kind:      CmdSparkline,
+		Bounds:    bounds,
+		Values:    copied,
+		Histogram: histogram,
 		Text:      overlay,
 		Style:     style,
 	})

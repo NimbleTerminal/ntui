@@ -1,0 +1,367 @@
+// Copyright (c) 2026 Neomantra Corp.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
+	"os"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	picture "nimbleterminal.dev/ntpicture"
+	"nimbleterminal.dev/ntui"
+)
+
+type tickMsg time.Time
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Second/20, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+var passNames = []string{
+	"01 ShadowCascade",
+	"02 GBufferOpaque",
+	"03 FurShellPass",
+	"04 SkyboxEnv",
+	"05 BloomDownUp",
+	"06 ntuiOverlay",
+}
+
+type dashboardModel struct {
+	session *picture.TerminalSession
+	ui      *ntui.Context
+	glyph   *ntui.GlyphBackend
+	raster  *ntui.RasterBackend
+	pic     *picture.Picture
+
+	width, height int
+	backendMode   int // 0=Glyph, 1=Raster
+
+	paused       bool
+	vsync        bool
+	gpuLimit     float64
+	instances    int
+	selectedPass int
+	themeMode    int
+
+	phase     float64
+	frameHist []float64
+	passTimes []float64
+
+	dirty     bool
+	awaiting  bool
+	submitted uint64
+	geometry  picture.RasterGeometry
+}
+
+func newDashboardModel() *dashboardModel {
+	session := picture.NewTerminalSession(picture.TerminalOptions{})
+	pic := picture.New(picture.Options{
+		Session:  session,
+		AutoMode: true,
+		StableID: true,
+		Render: picture.Config{
+			Fit:         picture.FitFill,
+			KittyMedium: picture.KittyMediumSharedMemory,
+			KittyFormat: picture.KittyFormatZlib,
+		},
+	})
+	_ = pic.SetVisible(false)
+	_ = pic.SetSize(92, 28)
+
+	m := &dashboardModel{
+		session:   session,
+		ui:        ntui.New(ntui.WithScreenSize(92, 28), ntui.WithTheme(ntui.CyberpunkTheme())),
+		glyph:     ntui.NewGlyphBackend(92, 28),
+		raster:    ntui.NewRasterBackend(9, 18),
+		pic:       pic,
+		width:     92,
+		height:    28,
+		vsync:     true,
+		gpuLimit:  16.6,
+		instances: 1200,
+		frameHist: make([]float64, 36),
+		passTimes: make([]float64, len(passNames)),
+		dirty:     true,
+		geometry:  pic.RasterGeometry(),
+	}
+	m.stepMetrics()
+	m.buildFrame()
+	return m
+}
+
+func (m *dashboardModel) stepMetrics() {
+	scale := float64(m.instances) / 1200.0
+	for i := range m.frameHist {
+		t := m.phase + float64(i)*0.22
+		ms := (7.5 + 3.2*math.Sin(t) + 1.8*math.Cos(t*2.7)) * scale
+		m.frameHist[i] = max(1.0, min(24.0, ms))
+	}
+	for i := range m.passTimes {
+		t := m.phase*0.7 + float64(i)*0.9
+		m.passTimes[i] = (0.8 + 2.6*math.Abs(math.Sin(t))) * scale
+	}
+}
+
+func (m *dashboardModel) Init() tea.Cmd {
+	return tea.Batch(m.pic.Init(), tickCmd())
+}
+
+func (m *dashboardModel) buildFrame() {
+	m.ui.BeginFrame()
+
+	// Panel 1: Real-time Frame Pacing & GPU Load
+	if m.ui.BeginPanel("GPU Frame Pacing & Telemetry", ntui.NewRect(1, 1, 44, 15)) {
+		latestMS := m.frameHist[len(m.frameHist)-1]
+		fps := 1000.0 / max(1.0, latestMS)
+		m.ui.KeyValue("Frame Time / FPS", fmt.Sprintf("%.2f ms (%.0f FPS)", latestMS, fps))
+		m.ui.KeyValue("Draw Calls / Tris", fmt.Sprintf("%d / %dk", m.instances/4, m.instances*3))
+		m.ui.Separator()
+
+		m.ui.PlotLines("Frame ms", m.frameHist, 40, 3, fmt.Sprintf("Now: %.1f ms", latestMS))
+		m.ui.ProgressBar(latestMS/max(1.0, m.gpuLimit), 40, fmt.Sprintf("Budget %.1f / %.1f ms", latestMS, m.gpuLimit))
+		m.ui.Separator()
+
+		m.ui.BeginHorizontal()
+		m.ui.Toggle("Pause", &m.paused)
+		m.ui.Checkbox("VSync", &m.vsync)
+		if m.ui.Button("Spike Load") {
+			m.instances = min(3000, m.instances+400)
+			m.stepMetrics()
+		}
+		m.ui.EndHorizontal()
+	}
+	m.ui.EndPanel()
+
+	// Panel 2: Render Pass Breakdown
+	if m.ui.BeginPanel("Render Pass Breakdown", ntui.NewRect(47, 1, 43, 15)) {
+		m.ui.PlotHistogram("Pass Duration", m.passTimes, 39, 3, "6 Active Passes")
+		m.ui.Separator()
+		m.ui.ListBox("Select Pass", &m.selectedPass, passNames, 6)
+		if m.selectedPass >= 0 && m.selectedPass < len(m.passTimes) {
+			m.ui.KeyValue("Selected Pass Cost", fmt.Sprintf("%.2f ms", m.passTimes[m.selectedPass]))
+		}
+	}
+	m.ui.EndPanel()
+
+	// Panel 3: Simulation & Theme Controls
+	if m.ui.BeginPanel("Simulation & Display Controls", ntui.NewRect(1, 17, 89, 10)) {
+		m.ui.SliderInt("Scene Instances", &m.instances, 200, 3000)
+		m.ui.SliderFloat("Frame Budget", &m.gpuLimit, 8.3, 33.3, "%.1f ms")
+		m.ui.Separator()
+
+		m.ui.BeginHorizontal()
+		m.ui.Label("Theme:")
+		if m.ui.RadioButtonInt("Cyberpunk", &m.themeMode, 0) {
+			m.ui.Theme = ntui.CyberpunkTheme()
+		}
+		if m.ui.RadioButtonInt("CRT Amber", &m.themeMode, 1) {
+			m.ui.Theme = ntui.AmberTheme()
+		}
+		if m.ui.RadioButtonInt("HUD Dark", &m.themeMode, 2) {
+			m.ui.Theme = ntui.HUDTheme()
+		}
+		m.ui.EndHorizontal()
+
+		m.ui.BeginHorizontal()
+		m.ui.Label("Backend (g):")
+		m.ui.RadioButtonInt("Glyph (ntcanvas)", &m.backendMode, 0)
+		m.ui.RadioButtonInt("Raster (ntpicture)", &m.backendMode, 1)
+		m.ui.EndHorizontal()
+	}
+	m.ui.EndPanel()
+
+	m.ui.EndFrame()
+}
+
+func (m *dashboardModel) submitRasterIfReady() tea.Cmd {
+	if m.backendMode != 1 || !m.dirty || m.awaiting || m.pic.Status().Busy {
+		return nil
+	}
+	g := m.pic.RasterGeometry()
+	if g.Pixels.X <= 0 || g.Pixels.Y <= 0 {
+		return nil
+	}
+	m.dirty = false
+	img := m.renderRasterFrameFor(g)
+	before := m.pic.Status().Generation
+	cmd := m.pic.SetImageImmutableFor(img, g)
+	if m.pic.Status().Generation != before {
+		m.awaiting = true
+		m.submitted = m.pic.Status().Generation
+	}
+	return cmd
+}
+
+func (m *dashboardModel) syncBackendVisibility(prevMode int) tea.Cmd {
+	if prevMode == m.backendMode {
+		return nil
+	}
+	if m.backendMode == 1 {
+		m.dirty = false
+		g := m.pic.RasterGeometry()
+		img := m.renderRasterFrameFor(g)
+		_ = m.pic.SetImageImmutableFor(img, g)
+		cmd := m.pic.SetVisible(true)
+		m.awaiting = m.pic.Status().Busy
+		m.submitted = m.pic.Status().Generation
+		return cmd
+	}
+	m.awaiting = false
+	return m.pic.SetVisible(false)
+}
+
+func (m *dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	prevMode := m.backendMode
+
+	switch ev := msg.(type) {
+	case picture.PresentedMsg:
+		if ev.Owner == m.pic && m.awaiting && ev.Generation >= m.submitted {
+			m.awaiting = false
+		}
+	case picture.StaleFrameMsg:
+		if ev.Owner == m.pic {
+			m.awaiting = false
+			m.dirty = true
+		}
+	case picture.ErrorMsg:
+		if ev.Owner == m.pic {
+			m.awaiting = false
+		}
+	case tickMsg:
+		if !m.paused {
+			m.phase += 0.22
+			m.stepMetrics()
+			m.dirty = true
+		}
+		m.buildFrame()
+		if c := m.pic.Update(msg); c != nil {
+			cmds = append(cmds, c)
+		}
+		if c := m.submitRasterIfReady(); c != nil {
+			cmds = append(cmds, c)
+		}
+		cmds = append(cmds, tickCmd())
+		return m, tea.Batch(cmds...)
+	case tea.KeyPressMsg:
+		if ev.String() == "ctrl+c" || (ev.String() == "q" && !m.ui.WantCaptureKeyboard()) {
+			m.session.Close()
+			return m, tea.Sequence(m.pic.Close(), tea.Quit)
+		}
+		if ev.String() == "g" && !m.ui.WantCaptureKeyboard() {
+			m.backendMode = 1 - m.backendMode
+		}
+	case tea.WindowSizeMsg:
+		if ev.Width > 0 && ev.Height > 0 {
+			m.width, m.height = ev.Width, ev.Height
+			m.glyph.Resize(ev.Width, ev.Height)
+			if c := m.pic.SetSize(ev.Width, ev.Height); c != nil {
+				cmds = append(cmds, c)
+			}
+			m.dirty = true
+			m.awaiting = false
+		}
+	}
+
+	if m.ui.ProcessInput(msg) {
+		m.dirty = true
+	}
+	m.buildFrame()
+
+	if c := m.syncBackendVisibility(prevMode); c != nil {
+		cmds = append(cmds, c)
+	}
+	if c := m.pic.Update(msg); c != nil {
+		cmds = append(cmds, c)
+	}
+	if g := m.pic.RasterGeometry(); g != m.geometry {
+		m.geometry = g
+		m.awaiting = false
+		m.dirty = true
+	}
+	if c := m.submitRasterIfReady(); c != nil {
+		cmds = append(cmds, c)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+func (m *dashboardModel) renderRasterFrameFor(g picture.RasterGeometry) *image.RGBA {
+	pw, ph := g.Pixels.X, g.Pixels.Y
+	if pw <= 0 || ph <= 0 {
+		cw, ch := m.raster.CellPixelSize()
+		pw, ph = max(1, m.width*cw), max(1, m.height*ch)
+	}
+	cw := max(1, pw/max(1, m.width))
+	ch := max(1, ph/max(1, m.height))
+	m.raster.SetCellPixelSize(cw, ch)
+
+	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
+	for y := 0; y < ph; y++ {
+		for x := 0; x < pw; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: 10, G: 8, B: 20, A: 255})
+		}
+	}
+	m.raster.RenderOver(img, m.ui.DrawList)
+	return img
+}
+
+func (m *dashboardModel) View() tea.View {
+	var content string
+	if m.backendMode == 1 {
+		content = m.pic.View()
+	} else {
+		content = m.glyph.RenderToString(m.ui.DrawList)
+	}
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeAllMotion
+	return v
+}
+
+func writeSnapshot(path string, m *dashboardModel) error {
+	img := m.renderRasterFrameFor(picture.RasterGeometry{
+		Pixels:        image.Pt(m.width*9, m.height*18),
+		DisplayAspect: float64(m.width*9) / float64(m.height*18),
+	})
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	encErr := png.Encode(f, img)
+	closeErr := f.Close()
+	if encErr != nil {
+		return encErr
+	}
+	return closeErr
+}
+
+func main() {
+	snapshot := flag.String("snapshot", "", "render the dashboard to a PNG file and exit")
+	flag.Parse()
+
+	m := newDashboardModel()
+	defer m.session.Close()
+	defer func() { _ = m.pic.Close() }()
+
+	if *snapshot != "" {
+		if err := writeSnapshot(*snapshot, m); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

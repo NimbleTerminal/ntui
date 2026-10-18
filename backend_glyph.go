@@ -103,6 +103,8 @@ func RenderToGraphemeGrid(grid *ntcanvas.GraphemeGrid, dl *DrawList) {
 			drawGlyphLine(grid, cmd.Bounds, clip, cmd.Style.BorderCellStyle())
 		case CmdGauge:
 			drawGlyphGauge(grid, cmd.Bounds, clip, cmd.Fraction, cmd.ShowThumb, cmd.Text, cmd.Style)
+		case CmdSparkline:
+			drawGlyphSparkline(grid, cmd.Bounds, clip, cmd.Values, cmd.Histogram, cmd.Text, cmd.Style)
 		}
 	}
 }
@@ -319,5 +321,69 @@ func drawGlyphGauge(grid *ntcanvas.GraphemeGrid, bounds, clip Rect, fraction flo
 			}
 			curX += rw
 		}
+	}
+}
+
+var verticalEighths = [9]rune{' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+func drawGlyphSparkline(grid *ntcanvas.GraphemeGrid, bounds, clip Rect, values []float64, histogram bool, overlay string, style WidgetStyle) {
+	vis := bounds.Intersect(clip)
+	if vis.Empty() || bounds.W <= 0 || bounds.H <= 0 || len(values) == 0 {
+		return
+	}
+	bgStyle := style.CellStyle()
+	drawGlyphRect(grid, bounds, clip, bgStyle)
+
+	accent := style.Accent
+	if accent.IsZero() {
+		accent = style.FG
+	}
+	barStyle := ntcanvas.CellStyle{
+		Foreground: accent.CanvasColor(),
+		Background: style.BG.CanvasColor(),
+	}
+
+	totalSubRows := bounds.H * 8
+	for col := 0; col < bounds.W; col++ {
+		idx := col * len(values) / bounds.W
+		if idx >= len(values) {
+			idx = len(values) - 1
+		}
+		v := max(0, min(1, values[idx]))
+		level := int(math.Round(v * float64(totalSubRows)))
+		if v > 0 && level == 0 {
+			level = 1
+		}
+		x := bounds.X + col
+		if !histogram && bounds.H > 1 {
+			// Line mode on multi-row chart: plot the active row cell
+			rowFromBottom := min(bounds.H-1, level/8)
+			rem := max(1, level%8)
+			y := bounds.Bottom() - 1 - rowFromBottom
+			putClipped(grid, clip, x, y, string(verticalEighths[rem]), barStyle)
+			continue
+		}
+		for rowFromBottom := 0; rowFromBottom < bounds.H; rowFromBottom++ {
+			y := bounds.Bottom() - 1 - rowFromBottom
+			cellUnits := level - rowFromBottom*8
+			if cellUnits <= 0 {
+				continue
+			}
+			if cellUnits >= 8 {
+				putClipped(grid, clip, x, y, "█", barStyle)
+			} else {
+				putClipped(grid, clip, x, y, string(verticalEighths[cellUnits]), barStyle)
+			}
+		}
+	}
+
+	if overlay != "" {
+		textRect := Rect{X: bounds.X + 1, Y: bounds.Y, W: max(1, bounds.W-2), H: 1}
+		ovStyle := ntcanvas.CellStyle{
+			Foreground: style.FG.CanvasColor(),
+			Background: style.BG.CanvasColor(),
+			Attributes: ntcanvas.Bold,
+		}
+		drawGlyphText(grid, textRect, clip, overlay, AlignRight, ovStyle)
 	}
 }

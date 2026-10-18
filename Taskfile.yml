@@ -31,8 +31,14 @@ tasks:
   build:
     desc: Build library and examples
     cmds: ['go build -mod=readonly ./...']
+  run-catalog:
+    desc: Run the full interactive UX Element Catalog demo
+    cmds: ['go run -mod=readonly ./examples/catalog']
+  run-dashboard:
+    desc: Run the live GPU & Engine Telemetry Dashboard demo
+    cmds: ['go run -mod=readonly ./examples/dashboard']
   run-hud:
-    desc: Run the interactive HUD example
+    desc: Run the interactive 3D Scene + HUD Overlay demo
     cmds: ['go run -mod=readonly ./examples/hud']
   ci:
     desc: Run formatting, vet, race tests, and CGO-free tests

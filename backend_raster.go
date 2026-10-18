@@ -104,6 +104,8 @@ func (b *RasterBackend) RenderOver(dst draw.Image, dl *DrawList) {
 			b.drawRasterLine(dst, pxBounds, pxClip, cmd.Style)
 		case CmdGauge:
 			b.drawRasterGauge(dst, pxBounds, pxClip, cmd.Fraction, cmd.ShowThumb, cmd.Text, cmd.Style)
+		case CmdSparkline:
+			b.drawRasterSparkline(dst, pxBounds, pxClip, cmd.Values, cmd.Histogram, cmd.Text, cmd.Style)
 		}
 	}
 }
@@ -271,6 +273,14 @@ func (b *RasterBackend) drawRasterText(dst draw.Image, pxBounds, pxClip image.Re
 					}
 				}
 			}
+		case '◂': // Leftward triangle
+			for col := 0; col < 4; col++ {
+				for dy := -(3 - col); dy <= (3 - col); dy++ {
+					if image.Pt(cx+1-col, midY+dy).In(vis) {
+						blendPixel(dst, cx+1-col, midY+dy, fg)
+					}
+				}
+			}
 		case '●', '◉': // Filled circle
 			for dy := -3; dy <= 3; dy++ {
 				for dx := -3; dx <= 3; dx++ {
@@ -310,6 +320,9 @@ func (b *RasterBackend) drawRasterText(dst draw.Image, pxBounds, pxClip image.Re
 					}
 				}
 			}
+		case '█': // Full block swatch
+			blockRect := image.Rect(x, topY+1, x+glyphW, topY+fontH-1)
+			fillRectAlpha(dst, blockRect.Intersect(vis), fg)
 		default:
 			d.Dot = fixed.P(x, baseY)
 			d.DrawString(string(r))
@@ -367,6 +380,80 @@ func (b *RasterBackend) drawRasterGauge(dst draw.Image, pxBounds, pxClip image.R
 
 	if overlay != "" {
 		b.drawRasterText(dst, pxBounds, pxClip, overlay, AlignCenter, style.FG)
+	}
+}
+
+func (b *RasterBackend) drawRasterSparkline(dst draw.Image, pxBounds, pxClip image.Rectangle, values []float64, histogram bool, overlay string, style WidgetStyle) {
+	if len(values) == 0 {
+		return
+	}
+	plotRect := pxBounds.Inset(1)
+	if plotRect.Empty() {
+		plotRect = pxBounds
+	}
+	fillRectAlpha(dst, plotRect.Intersect(pxClip), style.BG)
+
+	accent := style.Accent
+	if accent.IsZero() {
+		accent = style.FG
+	}
+	areaFill := accent
+	areaFill.A = 75
+
+	w := plotRect.Dx()
+	h := plotRect.Dy()
+	if w > 0 && h > 0 {
+		if histogram {
+			n := len(values)
+			for i, v := range values {
+				v = max(0, min(1, v))
+				x0 := plotRect.Min.X + (i*w)/n
+				x1 := plotRect.Min.X + ((i+1)*w)/n
+				if x1 > x0+1 {
+					x1--
+				}
+				barH := int(math.Round(v * float64(h-2)))
+				if v > 0 && barH == 0 {
+					barH = 1
+				}
+				barRect := image.Rect(x0, plotRect.Max.Y-1-barH, max(x0+1, x1), plotRect.Max.Y-1)
+				fillRectAlpha(dst, barRect.Intersect(pxClip), accent)
+			}
+		} else {
+			prevX, prevY := 0, 0
+			for px := 0; px < w; px++ {
+				idx := px * len(values) / w
+				if idx >= len(values) {
+					idx = len(values) - 1
+				}
+				v := max(0, min(1, values[idx]))
+				x := plotRect.Min.X + px
+				y := plotRect.Max.Y - 2 - int(math.Round(v*float64(max(1, h-4))))
+				fillColRect := image.Rect(x, y, x+1, plotRect.Max.Y-1)
+				fillRectAlpha(dst, fillColRect.Intersect(pxClip), areaFill)
+				if px > 0 {
+					yMin, yMax := min(prevY, y), max(prevY, y)
+					lineSeg := image.Rect(x, yMin, x+1, yMax+1)
+					fillRectAlpha(dst, lineSeg.Intersect(pxClip), accent)
+				} else {
+					lineSeg := image.Rect(x, y, x+1, y+1)
+					fillRectAlpha(dst, lineSeg.Intersect(pxClip), accent)
+				}
+				prevX, prevY = x, y
+				_ = prevX
+			}
+		}
+	}
+
+	borderCol := style.Border
+	if borderCol.IsZero() {
+		borderCol = style.FG
+	}
+	strokeRectAlpha(dst, plotRect, pxClip, 1, true, borderCol)
+
+	if overlay != "" {
+		headerRect := image.Rect(plotRect.Min.X+4, plotRect.Min.Y+1, plotRect.Max.X-4, min(plotRect.Max.Y, plotRect.Min.Y+b.cellH))
+		b.drawRasterText(dst, headerRect, pxClip, overlay, AlignRight, style.FG)
 	}
 }
 
