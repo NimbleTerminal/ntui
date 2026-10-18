@@ -103,7 +103,7 @@ go run ./examples/dashboard
 go run ./examples/hud
 ```
 
-See [DESIGN.md](DESIGN.md) for the full design prompt and technical specification.
+See [GUIDE.md](GUIDE.md) for the complete widget & state-binding guide, and [DESIGN.md](DESIGN.md) for the technical architecture specification.
 
 ## License
 
