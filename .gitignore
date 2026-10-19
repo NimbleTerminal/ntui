@@ -1,6 +1,12 @@
-bin/
-dist/
-.task/
+/dist/
+*.test
+*.wasm
 *.png
 *.exe
-*.wasm
+/bin/
+/.task/
+/web/demos/
+/web/booba/
+/web/ghostty-web/
+/web/wasm_exec.js
+/web/LICENSE

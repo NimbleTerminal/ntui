@@ -12,16 +12,18 @@ import (
 	"os"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"nimbleterminal.dev/ntcanvas"
 	picture "nimbleterminal.dev/ntpicture"
 	"nimbleterminal.dev/ntui"
+	"nimbleterminal.dev/ntui/examples/internal/demohelp"
 )
 
 type tickMsg time.Time
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second/30, func(t time.Time) tea.Msg {
+	return demohelp.Tick(time.Second/30, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -67,7 +69,10 @@ type demoModel struct {
 }
 
 func newDemoModel() *demoModel {
-	session := picture.NewTerminalSession(picture.TerminalOptions{})
+	session := picture.NewTerminalSession(picture.TerminalOptions{
+		CellPixelWidth:  9,
+		CellPixelHeight: 18,
+	})
 	pic := picture.New(picture.Options{
 		Session:  session,
 		AutoMode: true,
@@ -162,12 +167,13 @@ func (m *demoModel) buildFrame() {
 
 	// Floating Telemetry Panel on the top-right
 	teleX := max(38, m.width-34)
-	if m.ui.BeginPanel("IMGUI Telemetry", ntui.NewRect(teleX, 1, 32, 9)) {
+	if m.ui.BeginPanel("IMGUI Telemetry", ntui.NewRect(teleX, 1, 32, 10)) {
 		m.ui.Text("Mouse Cell: (%d, %d)", m.ui.Input.MouseX, m.ui.Input.MouseY)
 		m.ui.Text("Capture Mouse: %v", m.ui.WantCaptureMouse())
 		m.ui.Text("Capture Keys:  %v", m.ui.WantCaptureKeyboard())
 		m.ui.Text("Hot: %v  Active: %v", m.ui.Hot != 0, m.ui.Active != 0)
 		m.ui.Text("Camera: yaw=%.2f pitch=%.2f", m.yaw, m.pitch)
+		m.ui.Text("Zoom: %.1f (wheel / +/-)", m.zoom)
 		m.ui.LabelMuted("Drag background to orbit 3D")
 	}
 	m.ui.EndPanel()
@@ -215,9 +221,27 @@ func (m *demoModel) syncBackendVisibility(prevMode int) tea.Cmd {
 	return m.pic.SetVisible(false)
 }
 
+func (m *demoModel) Help() []key.Binding {
+	return []key.Binding{
+		demohelp.Key("Pause / Orbit", "space"),
+		demohelp.Key("Cycle mesh", "m"),
+		demohelp.Key("Zoom in", "+", "="),
+		demohelp.Key("Zoom out", "-"),
+		demohelp.Key("Reset camera", "r"),
+		demohelp.Key("Glyph / Raster", "g"),
+		demohelp.Key("Next widget", "tab"),
+		demohelp.Key("Quit", "q", "ctrl+c"),
+	}
+}
+
+func (m *demoModel) Summary() string {
+	return fmt.Sprintf("HUD: shape=%d rotate=%v zoom=%.1f backend=%d", m.shape, m.autoRotate, m.zoom, m.backendMode)
+}
+
 func (m *demoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	prevMode := m.backendMode
+	prevHot := m.ui.Hot
 
 	switch ev := msg.(type) {
 	case picture.PresentedMsg:
@@ -258,8 +282,39 @@ func (m *demoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.session.Close()
 			return m, tea.Sequence(m.pic.Close(), tea.Quit)
 		}
-		if ev.String() == "g" && !m.ui.WantCaptureKeyboard() {
-			m.backendMode = 1 - m.backendMode
+		if !m.ui.WantCaptureKeyboard() {
+			switch ev.String() {
+			case "space", " ":
+				m.autoRotate = !m.autoRotate
+				m.dirty = true
+			case "m":
+				m.shape = (m.shape + 1) % 3
+				m.dirty = true
+			case "+", "=":
+				m.zoom = max(1.8, m.zoom-0.2)
+				m.dirty = true
+			case "-", "_":
+				m.zoom = min(5.5, m.zoom+0.2)
+				m.dirty = true
+			case "r":
+				m.yaw, m.pitch = 0.4, 0.25
+				m.fov, m.zoom = 65, 3.2
+				m.density = 18
+				m.dirty = true
+			case "g":
+				m.backendMode = 1 - m.backendMode
+			}
+		}
+
+	case tea.MouseWheelMsg:
+		// Neither HUD panel has scrollable lists, so wheel events always zoom the 3D viewport.
+		switch ev.Mouse().Button {
+		case tea.MouseWheelUp:
+			m.zoom = max(1.8, m.zoom-0.2)
+			m.dirty = true
+		case tea.MouseWheelDown:
+			m.zoom = min(5.5, m.zoom+0.2)
+			m.dirty = true
 		}
 
 	case tea.WindowSizeMsg:
@@ -274,13 +329,12 @@ func (m *demoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.ui.ProcessInput(msg) {
-		m.dirty = true
-	}
+	processed := m.ui.ProcessInput(msg)
 	m.buildFrame()
-
-	if c := m.syncBackendVisibility(prevMode); c != nil {
-		cmds = append(cmds, c)
+	if processed {
+		if _, isMotion := msg.(tea.MouseMotionMsg); !isMotion || m.ui.Hot != prevHot || m.ui.Active != 0 {
+			m.dirty = true
+		}
 	}
 
 	// If ntui did NOT capture the mouse, allow dragging the background to orbit the 3D camera!
@@ -298,23 +352,20 @@ func (m *demoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.orbiting && !m.ui.WantCaptureMouse() {
 			dx := mouse.X - m.lastMX
 			dy := mouse.Y - m.lastMY
-			m.lastMX, m.lastMY = mouse.X, mouse.Y
-			m.yaw += float64(dx) * 0.05
-			m.pitch = max(-1.4, min(1.4, m.pitch+float64(dy)*0.05))
-			m.dirty = true
+			if dx != 0 || dy != 0 {
+				m.lastMX, m.lastMY = mouse.X, mouse.Y
+				m.yaw += float64(dx) * 0.05
+				m.pitch = max(-1.4, min(1.4, m.pitch+float64(dy)*0.05))
+				m.dirty = true
+				m.buildFrame()
+			}
 		}
 	case tea.MouseReleaseMsg:
 		m.orbiting = false
-	case tea.MouseWheelMsg:
-		if !m.ui.WantCaptureMouse() {
-			if ev.Mouse().Button == tea.MouseWheelUp {
-				m.zoom = max(1.8, m.zoom-0.2)
-				m.dirty = true
-			} else if ev.Mouse().Button == tea.MouseWheelDown {
-				m.zoom = min(5.5, m.zoom+0.2)
-				m.dirty = true
-			}
-		}
+	}
+
+	if c := m.syncBackendVisibility(prevMode); c != nil {
+		cmds = append(cmds, c)
 	}
 
 	if c := m.pic.Update(msg); c != nil {
@@ -469,12 +520,12 @@ func (m *demoModel) renderGlyphScene(grid *ntcanvas.GraphemeGrid) {
 
 func (m *demoModel) renderRasterFrameFor(g picture.RasterGeometry) *image.RGBA {
 	pw, ph := g.Pixels.X, g.Pixels.Y
-	if pw <= 0 || ph <= 0 {
-		cw, ch := m.raster.CellPixelSize()
-		pw, ph = max(1, m.width*cw), max(1, m.height*ch)
+	cw := pw / max(1, m.width)
+	ch := ph / max(1, m.height)
+	if cw < 7 || ch < 13 {
+		cw, ch = 9, 18
+		pw, ph = max(1, m.width)*cw, max(1, m.height)*ch
 	}
-	cw := max(1, pw/max(1, m.width))
-	ch := max(1, ph/max(1, m.height))
 	m.raster.SetCellPixelSize(cw, ch)
 
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
@@ -576,9 +627,5 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	demohelp.Main(m)
 }

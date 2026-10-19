@@ -12,15 +12,17 @@ import (
 	"os"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	picture "nimbleterminal.dev/ntpicture"
 	"nimbleterminal.dev/ntui"
+	"nimbleterminal.dev/ntui/examples/internal/demohelp"
 )
 
 type tickMsg time.Time
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second/20, func(t time.Time) tea.Msg {
+	return demohelp.Tick(time.Second/20, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -92,7 +94,10 @@ type catalogModel struct {
 }
 
 func newCatalogModel() *catalogModel {
-	session := picture.NewTerminalSession(picture.TerminalOptions{})
+	session := picture.NewTerminalSession(picture.TerminalOptions{
+		CellPixelWidth:  9,
+		CellPixelHeight: 18,
+	})
 	pic := picture.New(picture.Options{
 		Session:  session,
 		AutoMode: true,
@@ -351,7 +356,15 @@ func (m *catalogModel) buildFrame() {
 	m.ui.EndPanel()
 
 	// Right Window 2: Live IMGUI State Inspector
-	if m.ui.BeginPanel("IMGUI State Inspector", ntui.NewRect(rightX, 15, 35, 11)) {
+	if m.ui.BeginPanel("IMGUI State Inspector", ntui.NewRect(rightX, 15, 35, 12)) {
+		toggleLabel := "Switch to Raster (g)"
+		if m.backendMode == 1 {
+			toggleLabel = "Switch to Glyph (g)"
+		}
+		if m.ui.Button(toggleLabel + "###toggle_backend") {
+			m.backendMode = 1 - m.backendMode
+			m.logEvent("Backend toggled -> %d", m.backendMode)
+		}
 		backendStr := "Glyph (ntcanvas)"
 		if m.backendMode == 1 {
 			backendStr = "Raster (ntpicture)"
@@ -406,9 +419,25 @@ func (m *catalogModel) syncBackendVisibility(prevMode int) tea.Cmd {
 	return m.pic.SetVisible(false)
 }
 
+func (m *catalogModel) Help() []key.Binding {
+	return []key.Binding{
+		demohelp.Key("Next tab", "]"),
+		demohelp.Key("Cycle theme", "t"),
+		demohelp.Key("Cycle border", "b"),
+		demohelp.Key("Glyph / Raster", "g"),
+		demohelp.Key("Next widget", "tab"),
+		demohelp.Key("Quit", "q", "ctrl+c"),
+	}
+}
+
+func (m *catalogModel) Summary() string {
+	return fmt.Sprintf("Catalog: tab=%s theme=%d border=%d backend=%d", catalogTabs[m.activeTab], m.themeIdx, m.borderIdx, m.backendMode)
+}
+
 func (m *catalogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	prevMode := m.backendMode
+	prevHot := m.ui.Hot
 
 	switch ev := msg.(type) {
 	case picture.PresentedMsg:
@@ -448,8 +477,25 @@ func (m *catalogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.session.Close()
 			return m, tea.Sequence(m.pic.Close(), tea.Quit)
 		}
-		if ev.String() == "g" && !m.ui.WantCaptureKeyboard() {
-			m.backendMode = 1 - m.backendMode
+		if !m.ui.WantCaptureKeyboard() {
+			switch ev.String() {
+			case "]":
+				m.activeTab = (m.activeTab + 1) % len(catalogTabs)
+				m.dirty = true
+			case "[":
+				m.activeTab = (m.activeTab - 1 + len(catalogTabs)) % len(catalogTabs)
+				m.dirty = true
+			case "t":
+				m.themeIdx = (m.themeIdx + 1) % len(themeNames)
+				m.applySelectedTheme()
+				m.dirty = true
+			case "b":
+				m.borderIdx = (m.borderIdx + 1) % len(borderNames)
+				m.applySelectedTheme()
+				m.dirty = true
+			case "g":
+				m.backendMode = 1 - m.backendMode
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -464,10 +510,13 @@ func (m *catalogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.ui.ProcessInput(msg) {
-		m.dirty = true
-	}
+	processed := m.ui.ProcessInput(msg)
 	m.buildFrame()
+	if processed {
+		if _, isMotion := msg.(tea.MouseMotionMsg); !isMotion || m.ui.Hot != prevHot || m.ui.Active != 0 {
+			m.dirty = true
+		}
+	}
 
 	if c := m.syncBackendVisibility(prevMode); c != nil {
 		cmds = append(cmds, c)
@@ -489,23 +538,25 @@ func (m *catalogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *catalogModel) renderRasterFrameFor(g picture.RasterGeometry) *image.RGBA {
 	pw, ph := g.Pixels.X, g.Pixels.Y
-	if pw <= 0 || ph <= 0 {
-		cw, ch := m.raster.CellPixelSize()
-		pw, ph = max(1, m.width*cw), max(1, m.height*ch)
+	cw := pw / max(1, m.width)
+	ch := ph / max(1, m.height)
+	if cw < 7 || ch < 13 {
+		cw, ch = 9, 18
+		pw, ph = max(1, m.width)*cw, max(1, m.height)*ch
 	}
-	cw := max(1, pw/max(1, m.width))
-	ch := max(1, ph/max(1, m.height))
 	m.raster.SetCellPixelSize(cw, ch)
 
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
 	for y := 0; y < ph; y++ {
-		for x := 0; x < pw; x++ {
-			img.SetRGBA(x, y, color.RGBA{
-				R: uint8(10 + (x*16)/pw),
-				G: uint8(14 + (y*22)/ph),
-				B: uint8(26 + (x*20)/pw),
-				A: 255,
-			})
+		c := color.RGBA{
+			R: 12,
+			G: uint8(14 + (y*20)/max(1, ph)),
+			B: uint8(26 + (y*16)/max(1, ph)),
+			A: 255,
+		}
+		row := img.Pix[y*img.Stride : y*img.Stride+pw*4]
+		for x := 0; x < len(row); x += 4 {
+			row[x], row[x+1], row[x+2], row[x+3] = c.R, c.G, c.B, c.A
 		}
 	}
 	m.raster.RenderOver(img, m.ui.DrawList)
@@ -569,9 +620,5 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	demohelp.Main(m)
 }

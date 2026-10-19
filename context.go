@@ -135,8 +135,9 @@ func (ctx *Context) EndFrame() {
 			}
 		}
 	}
-	if ctx.Input.KeyPressed(KeyEscape) {
+	if ctx.Input.KeyPressed(KeyEscape) || (ctx.Input.MousePressed && ctx.Hot == 0) {
 		ctx.Focus = 0
+		ctx.editingText = false
 	}
 
 	// If the mouse button is no longer held down after frame resolution, clear Active.
@@ -221,10 +222,11 @@ func (ctx *Context) WantCaptureMouse() bool {
 	return false
 }
 
-// WantCaptureKeyboard reports whether a UI widget currently holds keyboard focus
-// or is actively editing text.
+// WantCaptureKeyboard reports whether a text input widget is actively editing text.
+// Non-text widgets only use navigation keys (Tab, Space/Enter, Arrows) and do not
+// block single-letter application shortcuts (like 'q' or 'g').
 func (ctx *Context) WantCaptureKeyboard() bool {
-	return ctx.Focus != 0 || ctx.editingText
+	return ctx.editingText
 }
 
 func (ctx *Context) registerFocusable(id ID) {

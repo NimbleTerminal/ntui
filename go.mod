@@ -7,7 +7,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.31
 	golang.org/x/image v0.47.0
 	nimbleterminal.dev/ntcanvas v0.1.0
-	nimbleterminal.dev/ntpicture v0.1.0
 )
 
 require (

@@ -6,21 +6,22 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"math"
 	"os"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	picture "nimbleterminal.dev/ntpicture"
 	"nimbleterminal.dev/ntui"
+	"nimbleterminal.dev/ntui/examples/internal/demohelp"
 )
 
 type tickMsg time.Time
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second/20, func(t time.Time) tea.Msg {
+	return demohelp.Tick(time.Second/20, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -62,7 +63,10 @@ type dashboardModel struct {
 }
 
 func newDashboardModel() *dashboardModel {
-	session := picture.NewTerminalSession(picture.TerminalOptions{})
+	session := picture.NewTerminalSession(picture.TerminalOptions{
+		CellPixelWidth:  9,
+		CellPixelHeight: 18,
+	})
 	pic := picture.New(picture.Options{
 		Session:  session,
 		AutoMode: true,
@@ -218,9 +222,35 @@ func (m *dashboardModel) syncBackendVisibility(prevMode int) tea.Cmd {
 	return m.pic.SetVisible(false)
 }
 
+func (m *dashboardModel) Help() []key.Binding {
+	return []key.Binding{
+		demohelp.Key("Pause / Resume", "space"),
+		demohelp.Key("Cycle theme", "t"),
+		demohelp.Key("Glyph / Raster", "g"),
+		demohelp.Key("Next widget", "tab"),
+		demohelp.Key("Quit", "q", "ctrl+c"),
+	}
+}
+
+func (m *dashboardModel) Summary() string {
+	return fmt.Sprintf("Dashboard: paused=%v theme=%d backend=%d", m.paused, m.themeMode, m.backendMode)
+}
+
+func (m *dashboardModel) applyTheme() {
+	switch m.themeMode {
+	case 1:
+		m.ui.Theme = ntui.AmberTheme()
+	case 2:
+		m.ui.Theme = ntui.HUDTheme()
+	default:
+		m.ui.Theme = ntui.CyberpunkTheme()
+	}
+}
+
 func (m *dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	prevMode := m.backendMode
+	prevHot := m.ui.Hot
 
 	switch ev := msg.(type) {
 	case picture.PresentedMsg:
@@ -256,8 +286,18 @@ func (m *dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.session.Close()
 			return m, tea.Sequence(m.pic.Close(), tea.Quit)
 		}
-		if ev.String() == "g" && !m.ui.WantCaptureKeyboard() {
-			m.backendMode = 1 - m.backendMode
+		if !m.ui.WantCaptureKeyboard() {
+			switch ev.String() {
+			case "space", " ":
+				m.paused = !m.paused
+				m.dirty = true
+			case "t":
+				m.themeMode = (m.themeMode + 1) % 3
+				m.applyTheme()
+				m.dirty = true
+			case "g":
+				m.backendMode = 1 - m.backendMode
+			}
 		}
 	case tea.WindowSizeMsg:
 		if ev.Width > 0 && ev.Height > 0 {
@@ -271,10 +311,13 @@ func (m *dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.ui.ProcessInput(msg) {
-		m.dirty = true
-	}
+	processed := m.ui.ProcessInput(msg)
 	m.buildFrame()
+	if processed {
+		if _, isMotion := msg.(tea.MouseMotionMsg); !isMotion || m.ui.Hot != prevHot || m.ui.Active != 0 {
+			m.dirty = true
+		}
+	}
 
 	if c := m.syncBackendVisibility(prevMode); c != nil {
 		cmds = append(cmds, c)
@@ -295,19 +338,21 @@ func (m *dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *dashboardModel) renderRasterFrameFor(g picture.RasterGeometry) *image.RGBA {
 	pw, ph := g.Pixels.X, g.Pixels.Y
-	if pw <= 0 || ph <= 0 {
-		cw, ch := m.raster.CellPixelSize()
-		pw, ph = max(1, m.width*cw), max(1, m.height*ch)
+	cw := pw / max(1, m.width)
+	ch := ph / max(1, m.height)
+	if cw < 7 || ch < 13 {
+		cw, ch = 9, 18
+		pw, ph = max(1, m.width)*cw, max(1, m.height)*ch
 	}
-	cw := max(1, pw/max(1, m.width))
-	ch := max(1, ph/max(1, m.height))
 	m.raster.SetCellPixelSize(cw, ch)
 
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
-	for y := 0; y < ph; y++ {
-		for x := 0; x < pw; x++ {
-			img.SetRGBA(x, y, color.RGBA{R: 10, G: 8, B: 20, A: 255})
-		}
+	pix := img.Pix
+	for i := 0; i < len(pix); i += 4 {
+		pix[i+0] = 10
+		pix[i+1] = 8
+		pix[i+2] = 20
+		pix[i+3] = 255
 	}
 	m.raster.RenderOver(img, m.ui.DrawList)
 	return img
@@ -359,9 +404,5 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	demohelp.Main(m)
 }

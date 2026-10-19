@@ -88,19 +88,26 @@ func (m *model) View() tea.View {
 - **Data Display & Telemetry**: `Text`, `TextColored`, `KeyValue`, `TableRow`, `ProgressBar`, `PlotLines`, `PlotHistogram`
 - **Built-in Themes**: `DefaultTheme()`, `HUDTheme()`, `AmberTheme()`, `CyberpunkTheme()`, `LightTheme()`
 
-## Examples
+## Examples (Native & Browser WASM via `go-booba`)
 
-Run the interactive examples directly with `go run`:
+Run the interactive examples natively in your terminal:
 
 ```sh
 # UX Element Catalog (4-tab showcase of all widgets, plots, trees, and themes)
-go run ./examples/catalog
+task run-catalog
 
 # Live GPU & Engine Telemetry Dashboard
-go run ./examples/dashboard
+task run-dashboard
 
 # Interactive 3D Viewport + Floating HUD Overlay (Glyph & Kitty/Sixel Raster modes)
-go run ./examples/hud
+task run-hud
+```
+
+Or build and serve all three demos in the browser via [`go-booba`](https://github.com/NimbleMarkets/go-booba) and `ghostty-web` (with OSC 7501 touch/action bars):
+
+```sh
+task serve-wasm-site
+# Open http://localhost:8000/web/
 ```
 
 See [GUIDE.md](GUIDE.md) for the complete widget & state-binding guide, and [DESIGN.md](DESIGN.md) for the technical architecture specification.

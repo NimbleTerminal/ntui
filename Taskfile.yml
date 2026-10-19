@@ -5,7 +5,10 @@ env:
 
 tasks:
   default:
-    cmds: [{task: test}]
+    cmds: [{task: build}]
+  list:
+    desc: List available tasks
+    cmds: ['task --list-all']
   fmt:
     desc: Format Go source
     cmds: ['gofmt -w .']
@@ -15,36 +18,101 @@ tasks:
       - |
         files="$(gofmt -l .)"
         if [ -n "$files" ]; then printf '%s\n' "$files"; exit 1; fi
+  go-tidy:
+    desc: Update native module metadata
+    cmds: ['go mod tidy', 'go -C examples mod tidy']
+  go-tidy-check:
+    aliases: [tidy-check]
+    desc: Check native module metadata without changing files
+    cmds: ['go mod tidy -diff', 'go -C examples mod tidy -diff']
+  go-verify:
+    desc: Verify downloaded module contents
+    cmds: ['go mod verify', 'go -C examples mod verify']
   test:
     desc: Run native tests
-    cmds: ['go test -mod=readonly ./...']
+    cmds: ['go test -mod=readonly ./...', 'go -C examples test -mod=readonly ./...']
   test-race:
     desc: Run native tests with the race detector
-    cmds: ['go test -mod=readonly -race ./...']
+    cmds: ['go test -mod=readonly -race ./...', 'go -C examples test -mod=readonly -race ./...']
   test-no-cgo:
     desc: Test without CGO
     env: {CGO_ENABLED: '0'}
-    cmds: ['go test -mod=readonly ./...']
+    cmds: ['go test -mod=readonly ./...', 'go -C examples test -mod=readonly ./...']
   vet:
     desc: Run Go vet
-    cmds: ['go vet -mod=readonly ./...']
+    cmds: ['go vet -mod=readonly ./...', 'go -C examples vet -mod=readonly ./...']
   build:
-    desc: Build library and examples
-    cmds: ['go build -mod=readonly ./...']
+    desc: Build library and native examples
+    cmds:
+      - go build -mod=readonly ./...
+      - task: build-examples
+  build-examples:
+    desc: Build all native demos
+    cmds:
+      - mkdir -p bin
+      - for: [catalog, dashboard, hud]
+        cmd: go -C examples build -mod=readonly -o ../bin/ntui-{{.ITEM}} ./{{.ITEM}}
   run-catalog:
     desc: Run the full interactive UX Element Catalog demo
-    cmds: ['go run -mod=readonly ./examples/catalog']
+    cmds: ['go -C examples run -mod=readonly ./catalog {{.CLI_ARGS}}']
   run-dashboard:
     desc: Run the live GPU & Engine Telemetry Dashboard demo
-    cmds: ['go run -mod=readonly ./examples/dashboard']
+    cmds: ['go -C examples run -mod=readonly ./dashboard {{.CLI_ARGS}}']
   run-hud:
     desc: Run the interactive 3D Scene + HUD Overlay demo
-    cmds: ['go run -mod=readonly ./examples/hud']
+    cmds: ['go -C examples run -mod=readonly ./hud {{.CLI_ARGS}}']
+  build-wasm:
+    desc: Build all browser demos
+    env:
+      GOWORK: '{{.ROOT_DIR}}/wasm.work'
+      GOOS: js
+      GOARCH: wasm
+      CGO_ENABLED: '0'
+    cmds:
+      - mkdir -p web/demos
+      - for: [catalog, dashboard, hud]
+        cmd: go -C examples build -mod=readonly -o ../web/demos/{{.ITEM}}.wasm ./{{.ITEM}}
+  build-wasm-site:
+    desc: Build browser demos and export the pinned booba runtime
+    cmds:
+      - task: build-wasm
+      - go -C examples tool booba-assets --no-index ../web
+      - cp LICENSE web/
+      - task: check-site
+  check-site:
+    desc: Check JavaScript syntax, required site assets, and smoke-test WASM demos
+    cmds:
+      - node --check web/site.js
+      - node scripts/check-site.mjs
+      - for: [catalog, dashboard, hud]
+        cmd: node scripts/smoke-demo.mjs {{.ITEM}}
+  serve-wasm-site:
+    desc: Serve demos at http://localhost:8000/web/
+    cmds:
+      - task: build-wasm-site
+      - python3 -m http.server 8000 --bind 127.0.0.1
+  test-wasm:
+    aliases: [wasm-test]
+    desc: Run library and example tests under Node WASM
+    env:
+      GOWORK: '{{.ROOT_DIR}}/wasm.work'
+      GOOS: js
+      GOARCH: wasm
+      CGO_ENABLED: '0'
+    cmds:
+      - 'go test -mod=readonly -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec" ./... ./examples/...'
   ci:
-    desc: Run formatting, vet, race tests, and CGO-free tests
+    desc: Full portable CI gate including native tests and booba WASM demos
     cmds:
       - task: fmt-check
-      - task: vet
+      - task: go-tidy-check
+      - task: go-verify
       - task: test-race
       - task: test-no-cgo
+      - task: vet
       - task: build
+      - task: build-wasm-site
+      - task: test-wasm
+  clean:
+    desc: Remove generated binaries and browser artifacts
+    cmds: ['rm -rf bin dist .task web/demos web/booba web/ghostty-web web/wasm_exec.js web/LICENSE']

@@ -467,15 +467,20 @@ func (ctx *Context) TextInput(label string, value *string, width int) bool {
 
 	changed := false
 	if ctx.Focus == id {
-		ctx.editingText = true
-		if ctx.Input.KeyPressed(KeyBackspace) && len(text) > 0 {
-			_, size := utf8.DecodeLastRuneInString(text)
-			text = text[:len(text)-size]
-			changed = true
-		}
-		if ctx.Input.Text != "" {
-			text += ctx.Input.Text
-			changed = true
+		if ctx.Input.KeyPressed(KeyEnter) || ctx.Input.KeyPressed(KeyEscape) {
+			ctx.Focus = 0
+			ctx.editingText = false
+		} else {
+			ctx.editingText = true
+			if ctx.Input.KeyPressed(KeyBackspace) && len(text) > 0 {
+				_, size := utf8.DecodeLastRuneInString(text)
+				text = text[:len(text)-size]
+				changed = true
+			}
+			if ctx.Input.Text != "" {
+				text += ctx.Input.Text
+				changed = true
+			}
 		}
 	}
 
