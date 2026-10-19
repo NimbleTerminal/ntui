@@ -5,9 +5,17 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { setTimeout as delay } from 'node:timers/promises';
 const demo = process.argv[2];
+const variant = process.argv[3];
 assert.ok(['catalog', 'dashboard', 'hud'].includes(demo));
 vm.runInThisContext(await readFile('web/wasm_exec.js', 'utf8'));
 const go = new Go();
+if (demo === 'catalog' && variant === 'plots') {
+  go.argv = ['catalog', '-tab=1'];
+} else if (demo === 'catalog' && variant === 'trees') {
+  go.argv = ['catalog', '-tab=2'];
+} else if (demo === 'catalog' && variant === 'themes') {
+  go.argv = ['catalog', '-tab=3'];
+}
 let exitCode;
 go.exit = code => { exitCode = code; };
 const { instance } = await WebAssembly.instantiate(await readFile(`web/demos/${demo}.wasm`), go.importObject);
@@ -68,12 +76,20 @@ try {
     checkAction('Next tab');
     checkAction('Cycle theme');
     checkAction('Glyph / Raster');
-    await send(']', 'Catalog: tab=Plots theme=0 border=0 backend=0');
-    await send('t', 'Catalog: tab=Plots theme=1 border=0 backend=0');
-    await send('b', 'Catalog: tab=Plots theme=1 border=1 backend=0');
-    await send('g', 'Catalog: tab=Plots theme=1 border=1 backend=1');
-    await send('g', 'Catalog: tab=Plots theme=1 border=1 backend=0');
-    await send(']', 'Catalog: tab=Trees & Lists theme=1 border=1 backend=0');
+    if (variant === 'plots') {
+      await send('t', 'Catalog: tab=Plots theme=1 border=0 backend=0');
+    } else if (variant === 'trees') {
+      await send('\x1b[<65;20;12M', 'Catalog: tab=Trees & Lists theme=0 border=0 backend=0');
+    } else if (variant === 'themes') {
+      await send('b', 'Catalog: tab=Themes theme=0 border=1 backend=0');
+    } else {
+      await send(']', 'Catalog: tab=Plots theme=0 border=0 backend=0');
+      await send('t', 'Catalog: tab=Plots theme=1 border=0 backend=0');
+      await send('b', 'Catalog: tab=Plots theme=1 border=1 backend=0');
+      await send('g', 'Catalog: tab=Plots theme=1 border=1 backend=1');
+      await send('g', 'Catalog: tab=Plots theme=1 border=1 backend=0');
+      await send(']', 'Catalog: tab=Trees & Lists theme=1 border=1 backend=0');
+    }
   } else if (demo === 'dashboard') {
     checkAction('Pause / Resume');
     checkAction('Cycle theme');
@@ -101,7 +117,8 @@ try {
   await running;
   assert.equal(exitCode, 0);
   assert.equal(globalThis.bubbletea_exited, true, 'exit published to adapter');
-  console.log(`${demo}: startup, actions, resize, exact demo state transitions, and clean exit passed`);
+  const label = variant ? `${demo} (${variant})` : demo;
+  console.log(`${label}: startup, actions, resize, exact demo state transitions, and clean exit passed`);
 } finally {
   clearTimeout(timeout);
 }

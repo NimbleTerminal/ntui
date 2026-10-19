@@ -1,26 +1,42 @@
 import { BoobaTerminal, installActionBar, installRendererHud, parseRendererFromURL } from './booba/booba.js';
 
 const demos = {
-  catalog: 'UX Element Catalog',
-  dashboard: 'Telemetry Dashboard',
-  hud: '3D Viewport + HUD',
+  catalog: 'Controls & input',
+  dashboard: 'Telemetry dashboard',
+  hud: '3D viewport + HUD',
+};
+const catalogTabs = {
+  plots: { flag: '1', title: 'Plots & sparklines' },
+  trees: { flag: '2', title: 'Trees & lists' },
+  themes: { flag: '3', title: 'Themes & palettes' },
 };
 const help = {
   catalog: 'Click tabs, drag panel title bars, or use ] to switch tabs · t: cycle theme · b: cycle border · g: toggle Glyph/Raster · Tab: focus next widget · q: quit.',
   dashboard: 'Space: pause/resume telemetry · t: cycle theme · g: toggle Glyph/Raster · Tab: focus next widget · q: quit.',
-  hud: 'Drag panels or adjust sliders · drag background to orbit 3D camera · Space: pause/orbit · m: cycle mesh · r: reset camera · g: toggle Glyph/Raster · q: quit.',
+  hud: 'Drag panels or adjust sliders · drag background to orbit 3D camera · mouse wheel or +/-: zoom · Space: pause/orbit · m: cycle mesh · r: reset camera · g: toggle Glyph/Raster · q: quit.',
 };
-const requested = new URLSearchParams(location.search).get('demo');
+const params = new URLSearchParams(location.search);
+const requested = params.get('demo');
 const demo = Object.hasOwn(demos, requested) ? requested : 'catalog';
+const tabKey = demo === 'catalog' ? params.get('tab') : null;
+const tabPreset = tabKey && Object.hasOwn(catalogTabs, tabKey) ? catalogTabs[tabKey] : null;
+const navKey = tabPreset ? tabKey : demo;
+const title = tabPreset ? tabPreset.title : demos[demo];
+
 const status = document.querySelector('#status');
-document.querySelector('#title').textContent = demos[demo];
-document.title = `${demos[demo]} · ntui`;
+document.querySelector('#title').textContent = title;
+document.title = `${title} · ntui`;
 const restart = new URL(location.href);
 restart.searchParams.set('demo', demo);
+if (tabPreset) {
+  restart.searchParams.set('tab', tabKey);
+} else {
+  restart.searchParams.delete('tab');
+}
 document.querySelector('#restart').href = restart.href;
 document.querySelector('#source').href = `https://github.com/NimbleTerminal/ntui/tree/main/examples/${demo}`;
 for (const link of document.querySelectorAll('[data-demo]')) {
-  if (link.dataset.demo === demo) link.setAttribute('aria-current', 'page');
+  if (link.dataset.demo === navKey) link.setAttribute('aria-current', 'page');
 }
 document.querySelector('#help').textContent = help[demo];
 function failed(error) {
@@ -30,6 +46,9 @@ function failed(error) {
 }
 async function main() {
   const go = new Go();
+  if (tabPreset) {
+    go.argv = ['catalog', `-tab=${tabPreset.flag}`];
+  }
   const response = await fetch(`demos/${demo}.wasm`);
   if (!response.ok) throw new Error(`Download failed (${response.status})`);
   const { instance } = await WebAssembly.instantiateStreaming(response, go.importObject);

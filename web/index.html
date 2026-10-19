@@ -10,12 +10,15 @@
   <header><a class="brand" href="./">ntui<span>Immediate-mode terminal UI &amp; HUD overlays.</span></a><a href="https://github.com/NimbleTerminal/ntui">Source ↗</a></header>
   <main>
     <nav aria-label="Examples">
-      <a href="?demo=catalog" data-demo="catalog"><strong>UX Element Catalog</strong><span>Four-tab showcase of buttons, sliders, plots, trees, color pickers, and themes.</span></a>
-      <a href="?demo=dashboard" data-demo="dashboard"><strong>Telemetry Dashboard</strong><span>Live GPU frame-time sparklines, pass breakdown histograms, and theme switching.</span></a>
-      <a href="?demo=hud" data-demo="hud"><strong>3D Viewport + HUD</strong><span>Interactive 3D wireframe scene with draggable floating HUD panels and input capture.</span></a>
+      <a href="?demo=catalog" data-demo="catalog"><strong>Controls &amp; input</strong><span>Buttons, pill toggles, checkboxes, radio groups, combo selectors, sliders, and text input.</span></a>
+      <a href="?demo=catalog&amp;tab=plots" data-demo="plots"><strong>Plots &amp; sparklines</strong><span>Live animated sine-wave sparklines, render pass histograms, and progress gauges.</span></a>
+      <a href="?demo=catalog&amp;tab=trees" data-demo="trees"><strong>Trees &amp; lists</strong><span>Collapsible scene hierarchy trees, scrollable shader selector list, and multi-column tables.</span></a>
+      <a href="?demo=catalog&amp;tab=themes" data-demo="themes"><strong>Themes &amp; palettes</strong><span>Live RGB color pickers, preset theme switcher (Dark, Cyberpunk, CRT Amber, HUD), and border styles.</span></a>
+      <a href="?demo=dashboard" data-demo="dashboard"><strong>Telemetry dashboard</strong><span>Real-time GPU frame-time sparklines, pass breakdown histograms, and simulation controls.</span></a>
+      <a href="?demo=hud" data-demo="hud"><strong>3D viewport + HUD</strong><span>Interactive 3D wireframe scene with draggable floating HUD panels, orbit camera, and wheel zoom.</span></a>
     </nav>
     <section class="demo" aria-label="Live terminal example">
-      <div class="toolbar"><h1 id="title">UX Element Catalog</h1><span><a id="source" href="https://github.com/NimbleTerminal/ntui/tree/main/examples/catalog">Example source ↗</a> · <a id="restart" href="?demo=catalog">Restart ↻</a></span></div>
+      <div class="toolbar"><h1 id="title">Controls &amp; input</h1><span><a id="source" href="https://github.com/NimbleTerminal/ntui/tree/main/examples/catalog">Example source ↗</a> · <a id="restart" href="?demo=catalog">Restart ↻</a></span></div>
       <div id="controls" role="group" aria-label="Terminal controls"></div>
       <div class="terminal-frame"><div id="terminal"></div></div>
       <p id="status" role="status">Starting terminal…</p>
@@ -23,7 +26,7 @@
     </section>
   </main>
   <footer>
-    <span>Powered by <a href="https://github.com/NimbleMarkets/go-booba">booba</a>. <a href="LICENSE">Code license</a></span>
+    <span>Powered by <a href="https://github.com/NimbleMarkets/go-booba">booba</a> and ghostty-web. <a href="LICENSE">Code license</a> · <a href="THIRD_PARTY_NOTICES.md">Dependency licenses</a></span>
     <span class="credit">Made with ❤️🤖🔥 for you by <a href="https://nimbleterminal.dev">Nimble Terminal</a></span>
   </footer>
   <script src="wasm_exec.js"></script>

@@ -4,7 +4,7 @@ import { readFile, access } from 'node:fs/promises';
 for (const file of [
   'index.html', 'site.css', 'site.js', 'wasm_exec.js', 'booba/booba.js',
   'ghostty-web/ghostty-web.js', 'ghostty-web/ghostty-vt.wasm',
-  'LICENSE',
+  'LICENSE', 'THIRD_PARTY_NOTICES.md',
 ]) await access(`web/${file}`);
 for (const demo of ['catalog', 'dashboard', 'hud']) {
   const bytes = await readFile(`web/demos/${demo}.wasm`);
@@ -17,8 +17,10 @@ for (const [, path] of html.matchAll(/(?:src|href)="([^"?#]+)"/g)) {
   if (/^(https?:|\.\/)/.test(path)) continue;
   await access(`web/${path}`);
 }
-for (const name of ['catalog', 'dashboard', 'hud']) {
+for (const name of ['catalog', 'plots', 'trees', 'themes', 'dashboard', 'hud']) {
   assert.ok(html.includes(`data-demo="${name}"`), `${name}: navigation`);
-  await access(`examples/${name}`);
+}
+for (const examplePath of ['examples/catalog', 'examples/dashboard', 'examples/hud']) {
+  await access(examplePath);
 }
 console.log('Site links, runtime assets, and three WASM binaries checked.');
