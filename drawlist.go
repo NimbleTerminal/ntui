@@ -2,6 +2,8 @@
 
 package ntui
 
+import "slices"
+
 // Layer orders draw commands from back to front regardless of declaration order.
 type Layer uint8
 
@@ -216,6 +218,8 @@ func (dl *DrawList) AddSparkline(bounds Rect, values []float64, histogram bool, 
 }
 
 // Commands returns all recorded DrawCmd items ordered from LayerBackground to LayerOverlay.
+// The command structs are copied, but Values slices are shared. Use Snapshot
+// when publishing a frame to another goroutine.
 func (dl *DrawList) Commands() []DrawCmd {
 	total := 0
 	for i := range dl.layers {
@@ -226,6 +230,31 @@ func (dl *DrawList) Commands() []DrawCmd {
 		out = append(out, dl.layers[i]...)
 	}
 	return out
+}
+
+// Snapshot returns commands in layer order with independently owned mutable
+// data. Call on the DrawList's owner goroutine after completing the frame.
+// The result survives Reset, BeginFrame, and mutations through Commands.
+// Strings and other immutable values are shared without additional copying.
+// After publication, treat the returned slice and its Values slices as read-only
+// until all consumers have finished; a snapshot is not a synchronization primitive.
+func (dl *DrawList) Snapshot() []DrawCmd {
+	return cloneValues(dl.Commands())
+}
+
+// SnapshotCommands copies an ordered command slice, including mutable Values.
+// The source must not be mutated during this call. Publish the result through
+// a channel, atomic.Value, or other synchronization and thereafter treat it as
+// read-only. The caller's order is preserved; commands are not sorted by Layer.
+func SnapshotCommands(commands []DrawCmd) []DrawCmd {
+	return cloneValues(slices.Clone(commands))
+}
+
+func cloneValues(commands []DrawCmd) []DrawCmd {
+	for i := range commands {
+		commands[i].Values = slices.Clone(commands[i].Values)
+	}
+	return commands
 }
 
 // Len returns the total number of draw commands recorded across all layers.

@@ -2,7 +2,7 @@
 
 `ntui` (`nimbleterminal.dev/ntui`) is a pure-Go immediate-mode GUI (IMGUI) library for the NimbleTerminal ecosystem ([Bubble Tea v2](https://github.com/charmbracelet/bubbletea), [`ntcanvas`](https://github.com/NimbleTerminal/ntcanvas), [`ntpicture`](https://github.com/NimbleTerminal/ntpicture), [`ntgpuimage`](https://github.com/NimbleTerminal/ntgpuimage), and [`nt3d`](https://github.com/NimbleTerminal/nt3d)).
 
-Declare controls inline as part of your application's execution flow without managing a retained widget tree. The same UI code evaluates into a backend-agnostic `DrawList` that renders either as terminal cell glyphs (`ntcanvas`) or as pixel-accurate alpha-blended raster graphics (`*image.RGBA` / `ntpicture` / `nt3d` HUD overlays).
+Declare controls inline as part of your application's execution flow without managing a retained widget tree. The same UI code evaluates into a backend-agnostic `DrawList` that renders either as terminal cell glyphs (`ntcanvas`) or as pixel-accurate alpha-blended raster graphics (`*image.RGBA` / `ntpicture` / `nt3d` HUD overlays), or directly into Ebitengine GPU images via the optional `nimbleterminal.dev/ntui/ebiten` package.
 
 ## Quick start
 
@@ -81,12 +81,21 @@ func (m *model) View() tea.View {
 3. **Raster Backend (`ntui.RasterBackend`)**:
    - Scales cell coordinates by `(CellPixelWidth, CellPixelHeight)` and alpha-blends translucent panels, crisp borders, continuous pixel sliders, and `golang.org/x/image/font` typography onto `*image.RGBA` or `draw.Image` buffers.
 
+4. **Ebitengine Backend (`ntuiebiten.Backend`)**:
+   - Import `ntuiebiten "nimbleterminal.dev/ntui/ebiten"` for GPU rendering into a caller-owned `*ebiten.Image`, with fractional cell scales, offsets, clipping, bundled fonts, and all draw commands.
+   - Publish `ui.DrawList.Snapshot()` after `EndFrame`; render it on the Ebitengine callback side. The root package remains independent of Ebitengine.
+   - See [the integration guide](GUIDE.md#7-ebitengine-overlays-and-snapshot-ownership), [package documentation](ebiten/doc.go), and the [ntebitengine ntui lab](https://github.com/NimbleTerminal/ntebitengine/tree/main/examples/ntui).
+
 ## Widgets & Themes
 
 - **Containers & Navigation**: `BeginPanel` / `EndPanel` (draggable, collapsible, z-ordered floating panels), `CollapsingHeader`, `TabBar`, `TreeNode` / `TreePop`, `Separator`, `BeginHorizontal` / `EndHorizontal`, `SameLine`
 - **Controls & Inputs**: `Button`, `Checkbox`, `RadioButton`, `SliderFloat`, `SliderInt`, `InputText`, `Combo`, `ListBox`, `ColorEdit`
 - **Data Display & Telemetry**: `Text`, `TextColored`, `KeyValue`, `TableRow`, `ProgressBar`, `PlotLines`, `PlotHistogram`
 - **Built-in Themes**: `DefaultTheme()`, `HUDTheme()`, `AmberTheme()`, `CyberpunkTheme()`, `LightTheme()`
+
+For a minimal standalone Ebitengine window, run `task run-ebiten` or
+`go -C examples run ./ebiten`. The [example](examples/ebiten/main.go) demonstrates
+mouse/keyboard input, a draggable panel, and fractional scaling on resize.
 
 ## Examples (Native & Browser WASM via `go-booba`)
 

@@ -34,10 +34,13 @@ tasks:
   test-race:
     desc: Run native tests with the race detector
     cmds: ['go test -mod=readonly -race ./...', 'go -C examples test -mod=readonly -race ./...']
+  test-gpu:
+    desc: Run Ebitengine rendering tests (requires desktop graphics)
+    cmds: ['go test -mod=readonly -tags integration ./ebiten']
   test-no-cgo:
-    desc: Test without CGO
+    desc: Test core without CGO (Ebitengine has platform-specific requirements)
     env: {CGO_ENABLED: '0'}
-    cmds: ['go test -mod=readonly ./...', 'go -C examples test -mod=readonly ./...']
+    cmds: ['go test -mod=readonly . ./ebiten/internal/geometry ./internal/...', 'go -C examples test -mod=readonly ./...']
   vet:
     desc: Run Go vet
     cmds: ['go vet -mod=readonly ./...', 'go -C examples vet -mod=readonly ./...']
@@ -54,8 +57,11 @@ tasks:
     desc: Build all native demos
     cmds:
       - mkdir -p bin
-      - for: [catalog, dashboard, hud]
+      - for: [catalog, dashboard, hud, ebiten]
         cmd: go -C examples build -mod=readonly -o ../bin/ntui-{{.ITEM}} ./{{.ITEM}}
+  run-ebiten:
+    desc: Run the standalone Ebitengine window example
+    cmds: ['go -C examples run -mod=readonly ./ebiten']
   run-catalog:
     desc: Run the full interactive UX Element Catalog demo
     cmds: ['go -C examples run -mod=readonly ./catalog {{.CLI_ARGS}}']
@@ -115,7 +121,7 @@ tasks:
       GOARCH: wasm
       CGO_ENABLED: '0'
     cmds:
-      - 'go test -mod=readonly -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec" ./... ./examples/...'
+      - 'go test -mod=readonly -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec" . ./ebiten/internal/geometry ./internal/... ./examples/...'
   ci:
     desc: Full portable CI gate including native tests and booba WASM demos
     cmds:

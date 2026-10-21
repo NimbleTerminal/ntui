@@ -278,7 +278,7 @@ case tea.KeyPressMsg:
 
 ## 6. Choosing a Render Backend
 
-The same `ui.DrawList` generated between `BeginFrame()` and `EndFrame()` can be rendered by either backend (or switched at runtime):
+The same `ui.DrawList` generated between `BeginFrame()` and `EndFrame()` can be rendered by any backend (or switched at runtime):
 
 1. **Glyph Backend (`ntui.GlyphBackend`)**:
    - Renders into an `ntcanvas.GraphemeGrid` using crisp Unicode box drawing (`╭─╮│╰─╯`), eighth-block sliders (`█▉▊▋▌▍▎▏`), and sparklines (`▁▂▃▄▅▆▇█`).
@@ -286,3 +286,81 @@ The same `ui.DrawList` generated between `BeginFrame()` and `EndFrame()` can be 
 2. **Raster Backend (`ntui.RasterBackend`)**:
    - Scales cell coordinates by `(CellPixelWidth, CellPixelHeight)` and alpha-blends translucent HUD panels, pixel sliders, and `basicfont` text directly onto an `*image.RGBA` buffer (`raster.RenderToImage(rgbaImg, ui.DrawList)`).
    - Ideal for compositing a HUD directly onto an `nt3d` framebuffer before presenting via `ntpicture` (Kitty / Sixel / iTerm2 graphics protocols).
+
+
+## 7. Ebitengine overlays and snapshot ownership
+
+Import `ntuiebiten "nimbleterminal.dev/ntui/ebiten"` from your GPU integration,
+not from ntui widget code. Use the same backend with a normal Ebitengine game or
+with `ntebitengine.DrawFunc`. Create it once on the callback side and reuse it:
+
+```go
+// Ebitengine callback goroutine:
+backend := ntuiebiten.New() // bundled Go Mono; defaults to 9x18 pixels per cell
+backend.Render(dst, commands, ntuiebiten.RenderOptions{
+    ScaleX: 9.5, ScaleY: 17.25,
+    OffsetX: 20, OffsetY: 10, // pixels relative to dst.Bounds().Min
+})
+// When no longer needed, on the same callback side:
+backend.Dispose()
+```
+
+`Render` does not clear, retain, or dispose `dst`. It supports subimages with
+nonzero bounds. Absolute cell edges are rounded once, preserving adjacent edges
+at fractional scales. Clipping restricts output without changing layout or
+alignment. Input and hit testing continue to use terminal cell coordinates.
+`WithFontFaces(regular, bold)` accepts `text/v2` faces at a fixed pixel size;
+the bundled default automatically follows the cell scale. See the package docs
+for supported style attributes and deliberate raster-backend differences.
+
+`DrawList.Commands()` copies structs but shares `Values` slices. For a cross-loop
+handoff, use `DrawList.Snapshot()` or `ntui.SnapshotCommands(commands)`. They copy
+mutable slices and share immutable strings. Source resets, the next `BeginFrame`,
+and source mutations cannot affect the copy. The returned slice is **read-only by
+contract** after publication, including its nested `Values`; do not recycle it
+while another goroutine might still hold it.
+
+```go
+type frame struct {
+    Commands []ntui.DrawCmd
+    Phase float64
+}
+var latest atomic.Value // initialize before starting either loop
+latest.Store(frame{})
+
+// Bubble Tea Update, after ProcessInput and all widget declarations:
+ui.EndFrame()
+latest.Store(frame{Commands: ui.DrawList.Snapshot(), Phase: phase})
+
+// Ebitengine callback; backend was created on this side:
+f := latest.Load().(frame) // load once, for both scene and overlay
+drawScene(dst, f.Phase)
+backend.Render(dst, f.Commands, ntuiebiten.RenderOptions{
+    ScaleX: float64(geo.Pixels.X) / float64(geo.Cells.X),
+    ScaleY: float64(geo.Pixels.Y) / float64(geo.Cells.Y),
+})
+```
+
+Here `geo` is supplied by ntebitengine. Guard zero cell dimensions. The backend
+has no dependency on that adapter or `RasterGeometry`. Keep `Context`, input,
+layout, and widget-bound values on Bubble Tea. Subtract terminal header rows from
+mouse coordinates with `ui.Input.OffsetY`. Check mouse/keyboard capture before
+scene actions; focused buttons/sliders also consume navigation keys even when
+`WantCaptureKeyboard()` is false (that flag specifically means text editing).
+
+For ntebitengine, compose scene and UI into the same callback destination. Let
+it own the one final readback, geometry invalidation, and ntpicture pacing.
+Never pass an `*ebiten.Image` to CPU `RasterBackend.RenderOver`: its generic
+per-pixel path can cause GPU reads. Do not start another `RunGame`.
+
+At 1x2 pixels per terminal cell, raster text is not readable. The integration
+lab uses a separate glyph control pane below its two-row terminal header in
+glyph mode or below 6x12 pixels per cell, and keeps only the animated scene in
+the picture. At larger scales it uses draggable translucent GPU panels.
+
+CPU-only validation (no display): `go test . ./ebiten/internal/geometry`.
+Real graphics validation: `go test -tags integration ./ebiten` with a working
+desktop graphics environment. Set `NTUI_TEST_IMAGE=/tmp/ntui.png` to export a
+light/dark rendering contact sheet. GPU tests use readback only for assertions;
+the backend itself never reads pixels. Font redistribution terms are in
+[ebiten/FONT-LICENSE.txt](ebiten/FONT-LICENSE.txt).
